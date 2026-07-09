@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스카이다이브 서바이벌 (SkyDive Survival)</title>
+    <!-- Tailwind CSS 사용 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 아이콘 사용 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0f172a;
+            color: #fff;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #0c4a6e, #0284c7, #38bdf8, #bae6fd, #fef08a, #fef08a, #86efac);
+            background-size: 100% 1000%;
+            background-position: top center;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+
+    <!-- 게임 컨테이너 -->
+    <div class="relative w-full max-w-md h-[100vh] md:h-[90vh] md:max-h-[800px] bg-slate-900 md:rounded-2xl md:shadow-2xl overflow-hidden flex flex-col justify-between">
+        
+        <!-- 상단 헤더 (점수, 고도, 생명) -->
+        <div class="absolute top-0 left-0 right-0 z-10 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pointer-events-none">
+            <!-- 고도 정보 -->
+            <div class="flex flex-col">
+                <span class="text-xs text-slate-300 uppercase tracking-wider font-bold">남은 고도</span>
+                <span id="altitude-display" class="text-2xl font-black text-yellow-300">1,000m</span>
+            </div>
+            
+            <!-- 하트 체력 -->
+            <div class="flex items-center gap-1 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10">
+                <div id="hearts-container" class="flex gap-1 text-red-500 text-lg">
+                    <i class="fa-solid fa-heart"></i>
+                    <i class="fa-solid fa-heart"></i>
+                    <i class="fa-solid fa-heart"></i>
+                </div>
+            </div>
+
+            <!-- 스코어 -->
+            <div class="flex flex-col items-end">
+                <span class="text-xs text-slate-300 uppercase tracking-wider font-bold">버틴 시간</span>
+                <span id="score-display" class="text-2xl font-black text-white">0.0s</span>
+            </div>
+        </div>
+
+        <!-- 액티브 아이템/버프 표시기 -->
+        <div class="absolute top-16 left-4 z-10 flex flex-col gap-2 pointer-events-none">
+            <div id="shield-indicator" class="hidden items-center gap-1.5 bg-blue-500/80 text-white text-xs px-2.5 py-1 rounded-full border border-blue-300 animate-pulse">
+                <i class="fa-solid fa-shield-halved"></i> 보호막 활성화
+            </div>
+            <div id="slow-indicator" class="hidden items-center gap-1.5 bg-emerald-500/80 text-white text-xs px-2.5 py-1 rounded-full border border-emerald-300 animate-pulse">
+                <i class="fa-solid fa-wind"></i> 저속 낙하 중
+            </div>
+        </div>
+
+        <!-- 게임 플레이 캔버스 -->
+        <canvas id="gameCanvas" class="w-full h-full flex-grow"></canvas>
+
+        <!-- 모바일 터치 컨트롤 영역 (하단 좌우 터치 영역을 시각적으로 구분하지 않고 투명 처리) -->
+        <div class="absolute bottom-0 left-0 right-0 h-1/4 z-10 flex justify-between pointer-events-none">
+            <div class="w-1/2 h-full pointer-events-auto cursor-pointer" id="touch-left"></div>
+            <div class="w-1/2 h-full pointer-events-auto cursor-pointer" id="touch-right"></div>
+        </div>
+
+        <!-- 인트로 / 대기화면 레이어 -->
+        <div id="start-screen" class="absolute inset-0 bg-slate-900/95 z-20 flex flex-col justify-between p-6 text-center">
+            <div class="my-auto space-y-6">
+                <!-- 불타는 비행기 아이콘 장식 -->
+                <div class="relative inline-block">
+                    <div class="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto text-4xl animate-bounce">
+                        🪂
+                    </div>
+                    <span class="absolute -top-2 -right-2 text-2xl animate-pulse">✈️🔥</span>
+                </div>
+                
+                <h1 class="text-3xl font-extrabold tracking-tight text-white">
+                    스카이다이브 <span class="text-yellow-400 block mt-1">탈출 서바이벌</span>
+                </h1>
+                
+                <p class="text-slate-300 text-sm leading-relaxed max-w-sm mx-auto">
+                    타고 있던 비행기가 폭발했습니다! 낙하산을 펴고 추락하는 도중 장애물을 피해 <strong class="text-emerald-400">안전하게 지상에 착지</strong>하세요. 고도가 0m가 되면 성공입니다!
+                </p>
+
+                <!-- 난이도 경고 -->
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-xl text-xs text-slate-400 text-left space-y-1 max-w-sm mx-auto">
+                    <p class="font-semibold text-slate-200"><i class="fa-solid fa-circle-exclamation text-amber-500 mr-1"></i> 게임 특징</p>
+                    <p>• 시간이 지날수록 하강 속도가 빨라지고 장애물이 많아집니다.</p>
+                    <p>• <span class="text-blue-400 font-semibold">보호막(🛡️)</span>과 <span class="text-emerald-400 font-semibold">슬로우(🎈)</span> 아이템을 꼭 먹으세요.</p>
+                    <p>• 키보드 <span class="bg-slate-700 px-1 rounded text-white font-mono">← / →</span> 또는 모바일 화면 <span class="text-amber-400">좌우 터치</span>로 움직입니다.</p>
+                </div>
+            </div>
+
+            <button id="start-btn" class="w-full py-4 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 active:scale-95 transition-all text-slate-950 font-bold text-lg rounded-xl shadow-lg shadow-yellow-500/20">
+                낙하 시작하기 <i class="fa-solid fa-play ml-1"></i>
+            </button>
+        </div>
+
+        <!-- 게임 종료 / 실패 / 성공 레이어 -->
+        <div id="result-screen" class="absolute inset-0 bg-slate-900/95 z-20 flex flex-col justify-between p-6 text-center hidden">
+            <div class="my-auto space-y-6">
+                <!-- 결과 뱃지 -->
+                <div id="result-badge" class="w-20 h-20 rounded-full flex items-center justify-center mx-auto text-4xl shadow-lg">
+                    <!-- 아이콘/이모지 동적 주입 -->
+                </div>
+
+                <div class="space-y-2">
+                    <h2 id="result-title" class="text-3xl font-black text-white">결과 타이틀</h2>
+                    <p id="result-desc" class="text-slate-300 text-sm max-w-xs mx-auto">결과 묘사 텍스트</p>
+                </div>
+
+                <!-- 상세 기록 판넬 -->
+                <div class="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-4 max-w-xs mx-auto grid grid-cols-2 gap-4">
+                    <div class="text-left border-r border-slate-700/50 pr-2">
+                        <span class="text-xs text-slate-400 block">버틴 시간</span>
+                        <span id="result-time" class="text-xl font-bold text-yellow-400">0.0초</span>
+                    </div>
+                    <div class="text-left pl-2">
+                        <span class="text-xs text-slate-400 block">최종 고도</span>
+                        <span id="result-alt" class="text-xl font-bold text-sky-400">0m</span>
+                    </div>
+                </div>
+
+                <!-- 최고 기록 갱신 메시지 -->
+                <div id="high-score-msg" class="text-yellow-300 text-sm font-bold animate-pulse hidden">
+                    <i class="fa-solid fa-trophy mr-1"></i> 최고 기록을 경신했습니다!
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button id="restart-btn" class="w-full py-4 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-95 transition-all text-white font-bold text-lg rounded-xl shadow-lg shadow-sky-500/20">
+                    다시 시도하기 <i class="fa-solid fa-rotate-right ml-1"></i>
+                </button>
+                <button id="home-btn" class="w-full py-2.5 text-slate-400 hover:text-white transition-colors text-sm font-semibold">
+                    메인 화면으로
+                </button>
+            </div>
+        </div>
+
+        <!-- 커스텀 일시정지 버튼 -->
+        <button id="pause-btn" class="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-9 h-9 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center border border-white/10 text-white text-sm transition-all hidden">
+            <i class="fa-solid fa-pause"></i>
+        </button>
+
+        <!-- 일시정지 오버레이 -->
+        <div id="pause-screen" class="absolute inset-0 bg-slate-950/80 z-15 flex flex-col items-center justify-center p-6 text-center hidden">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-xs w-full space-y-4 shadow-2xl">
+                <h3 class="text-xl font-bold text-white"><i class="fa-solid fa-pause text-yellow-400 mr-2"></i>일시 정지</h3>
+                <p class="text-slate-400 text-sm">잠시 숨을 고르고 준비가 되면 다시 뛰어내리세요.</p>
+                <div class="space-y-2">
+                    <button id="resume-btn" class="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl transition-colors">
+                        계속하기
+                    </button>
+                    <button id="pause-quit-btn" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors text-xs">
+                        메인화면으로 포기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 스크립트 작성 -->
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI 요소 취득
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const resultScreen = document.getElementById('result-screen');
+        const restartBtn = document.getElementById('restart-btn');
+        const homeBtn = document.getElementById('home-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const pauseScreen = document.getElementById('pause-screen');
+        const resumeBtn = document.getElementById('resume-btn');
+        const pauseQuitBtn = document.getElementById('pause-quit-btn');
+
+        const altitudeDisplay = document.getElementById('altitude-display');
+        const scoreDisplay = document.getElementById('score-display');
+        const heartsContainer = document.getElementById('hearts-container');
+        const shieldIndicator = document.getElementById('shield-indicator');
+        const slowIndicator = document.getElementById('slow-indicator');
+
+        const resultBadge = document.getElementById('result-badge');
+        const resultTitle = document.getElementById('result-title');
+        const resultDesc = document.getElementById('result-desc');
+        const resultTime = document.getElementById('result-time');
+        const resultAlt = document.getElementById('result-alt');
+        const highScoreMsg = document.getElementById('high-score-msg');
+
+        // 캔버스 크기 세팅
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 게임 상태 상수들
+        const GAME_STATE = {
+            MENU: 'MENU',
+            PLAYING: 'PLAYING',
+            PAUSED: 'PAUSED',
+            GAMEOVER: 'GAMEOVER',
+            SUCCESS: 'SUCCESS'
+        };
+
+        // 게임 변수 그룹
+        let state = GAME_STATE.MENU;
+        let highTime = parseFloat(localStorage.getItem('skydive_high_time')) || 0;
+        let lastTime = 0;
+        let gameTime = 0; // 초 단위
+
+        // 메인 플레이어 오브젝트
+        const player = {
+            x: 0,
+            y: 0,
+            width: 50,
+            height: 75,
+            vx: 0,
+            maxSpeed: 7,
+            accel: 0.8,
+            friction: 0.88,
+            lives: 3,
+            maxLives: 3,
+            shield: false,
+            shieldTimer: 0,
+            slow: false,
+            slowTimer: 0,
+            targetX: null, // 모바일 터치 타겟
+            invulnTimer: 0, // 무적 타이머
+            isSafeLanded: false
+        };
+
+        // 게임 맵 및 스크롤 파라미터
+        const MAP_START_ALTITUDE = 1000; // 1000m에서 낙하 시작
+        let currentAltitude = MAP_START_ALTITUDE;
+        let baseFallSpeed = 4; // 기본 고도 하강 속도 (초당 하강률 보정)
+        let fallSpeedMultiplier = 1; // 난이도에 의한 속도 배율
+        let yScroll = 0; // 가상의 하강 배경 스크롤 값
+
+        // 파티클 (낙하 효과, 충돌 효과 등)
+        let particles = [];
+        // 장애물 배열 (새, 구름, 번개, 드론, 비행기 파편 등)
+        let obstacles = [];
+        // 아이템 배열 (하트, 쉴드, 풍선)
+        let items = [];
+        // 구름 배경 레이어 (시각적 입체감)
+        let cloudsBg = [];
+
+        // 조작 감지
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (state === GAME_STATE.PLAYING) {
+                // 움직일 때 터치 타겟 해제
+                player.targetX = null;
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // 모바일 터치 이벤트 바인딩
+        const touchLeft = document.getElementById('touch-left');
+        const touchRight = document.getElementById('touch-right');
+
+        touchLeft.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.targetX = canvas.width * 0.25;
+        });
+        touchRight.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            player.targetX = canvas.width * 0.75;
+        });
+        
+        // 캔버스 자체 드래그 및 터치 무브로 플레이어 세밀하게 제어
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (state !== GAME_STATE.PLAYING) return;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = touch.clientX - rect.left;
+        });
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (state !== GAME_STATE.PLAYING) return;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            player.targetX = touch.clientX - rect.left;
+        });
+
+        // --- 초기화 함수 ---
+        function initGame() {
+            state = GAME_STATE.PLAYING;
+            gameTime = 0;
+            currentAltitude = MAP_START_ALTITUDE;
+            fallSpeedMultiplier = 1;
+            yScroll = 0;
+
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height * 0.25; // 위에서 1/4 위치에 플레이어 고정
+            player.vx = 0;
+            player.lives = player.maxLives;
+            player.shield = false;
+            player.shieldTimer = 0;
+            player.slow = false;
+            player.slowTimer = 0;
+            player.targetX = null;
+            player.invulnTimer = 0;
+            player.isSafeLanded = false;
+
+            particles = [];
+            obstacles = [];
+            items = [];
+            cloudsBg = [];
+
+            // 배경 장식용 구름 생성
+            for (let i = 0; i < 6; i++) {
+                cloudsBg.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    width: Math.random() * 150 + 100,
+                    height: Math.random() * 50 + 40,
+                    speed: Math.random() * 0.5 + 0.2,
+                    opacity: Math.random() * 0.2 + 0.1
+                });
+            }
+
+            // UI 갱신
+            updateHearts();
+            updateUI();
+            
+            startScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            pauseScreen.classList.add('hidden');
+            pauseBtn.classList.remove('hidden');
+
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- UI 하트 그리기 ---
+        function updateHearts() {
+            heartsContainer.innerHTML = '';
+            for (let i = 0; i < player.maxLives; i++) {
+                const heart = document.createElement('i');
+                if (i < player.lives) {
+                    heart.className = 'fa-solid fa-heart transition-transform scale-100 duration-200';
+                } else {
+                    heart.className = 'fa-regular fa-heart text-slate-500 transition-transform scale-90 duration-200';
+                }
+                heartsContainer.appendChild(heart);
+            }
+        }
+
+        function updateUI() {
+            altitudeDisplay.textContent = `${Math.max(0, Math.floor(currentAltitude))}m`;
+            scoreDisplay.textContent = `${gameTime.toFixed(1)}s`;
+
+            if (player.shield) {
+                shieldIndicator.classList.remove('hidden');
+                shieldIndicator.classList.add('flex');
+            } else {
+                shieldIndicator.classList.add('hidden');
+                shieldIndicator.classList.remove('flex');
+            }
+
+            if (player.slow) {
+                slowIndicator.classList.remove('hidden');
+                slowIndicator.classList.add('flex');
+            } else {
+                slowIndicator.classList.add('hidden');
+                slowIndicator.classList.remove('flex');
+            }
+        }
+
+        // 파티클 스폰 함수
+        function spawnParticle(x, y, color, type = 'trail') {
+            particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * (type === 'hit' ? 8 : 2),
+                vy: type === 'hit' ? (Math.random() - 0.5) * 8 : (Math.random() * 2 + 1),
+                size: Math.random() * (type === 'hit' ? 6 : 4) + 2,
+                color: color,
+                alpha: 1,
+                life: 1,
+                decay: Math.random() * 0.03 + 0.015,
+                type: type
+            });
+        }
+
+        // 장애물 생성 로직
+        let obstacleSpawnTimer = 0;
+        function handleSpawns(dt) {
+            if (currentAltitude <= 80) return; // 지면에 근접하면 장애물 생성 중지
+
+            obstacleSpawnTimer += dt;
+            
+            // 난이도 상승에 따른 젠 주기 조절 (시간 비례)
+            const baseSpawnRate = 1.4; // 기본 1.4초당 하나
+            const spawnInterval = Math.max(0.45, baseSpawnRate - (gameTime * 0.012));
+
+            if (obstacleSpawnTimer >= spawnInterval) {
+                obstacleSpawnTimer = 0;
+                spawnObstacle();
+            }
+
+            // 아이템 스폰 (8초~12초 간격)
+            if (Math.random() < 0.002) {
+                spawnItem();
+            }
+        }
+
+        const OBSTACLE_TYPES = {
+            CLOUD: { name: '먹구름', width: 70, height: 45, color: '#475569', speed: 1.5, emoji: '☁️', damage: 1 },
+            BIRD: { name: '독수리', width: 40, height: 30, color: '#b45309', speed: 3.5, emoji: '🦅', damage: 1, horizontal: true },
+            LIGHTNING_CLOUD: { name: '천둥구름', width: 85, height: 55, color: '#1e1b4b', speed: 2, emoji: '⛈️', damage: 2 },
+            MISSILE: { name: '조명탄', width: 25, height: 45, color: '#dc2626', speed: 7, emoji: '🚀', damage: 1, homing: true },
+            DRONE: { name: '드론', width: 35, height: 35, color: '#0284c7', speed: 4, emoji: '🛸', damage: 1, wavy: true }
+        };
+
+        function spawnObstacle() {
+            // 난이도(경과 시간)에 따른 고티어 장애물 스폰 확률 증가
+            const rand = Math.random();
+            let type;
+
+            if (gameTime < 10) {
+                type = rand < 0.7 ? OBSTACLE_TYPES.CLOUD : OBSTACLE_TYPES.BIRD;
+            } else if (gameTime < 25) {
+                if (rand < 0.4) type = OBSTACLE_TYPES.CLOUD;
+                else if (rand < 0.75) type = OBSTACLE_TYPES.BIRD;
+                else if (rand < 0.9) type = OBSTACLE_TYPES.DRONE;
+                else type = OBSTACLE_TYPES.LIGHTNING_CLOUD;
+            } else { // 25초 이상 헬 게이트
+                if (rand < 0.2) type = OBSTACLE_TYPES.CLOUD;
+                else if (rand < 0.45) type = OBSTACLE_TYPES.BIRD;
+                else if (rand < 0.7) type = OBSTACLE_TYPES.DRONE;
+                else if (rand < 0.85) type = OBSTACLE_TYPES.LIGHTNING_CLOUD;
+                else type = OBSTACLE_TYPES.MISSILE;
+            }
+
+            const scale = Math.random() * 0.4 + 0.8; // 크기 변동 부여
+            const width = type.width * scale;
+            const height = type.height * scale;
+            
+            // X축 무작위 스폰
+            const x = Math.random() * (canvas.width - width);
+            // 캔버스 최하단 위쪽에서 떨어져 보이게 Y 시작
+            const y = canvas.height + 50;
+
+            obstacles.push({
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                type: type,
+                speedY: -(type.speed * fallSpeedMultiplier * (player.slow ? 0.5 : 1.0)), // 스크롤에 맞추어 올라옴
+                speedX: type.horizontal ? (Math.random() > 0.5 ? 2.0 : -2.0) : 0,
+                pulseAngle: 0,
+                homingChecked: false
+            });
+        }
+
+        const ITEM_TYPES = {
+            HEART: { name: '치유', width: 30, height: 30, emoji: '❤️', action: () => {
+                if (player.lives < player.maxLives) {
+                    player.lives++;
+                    updateHearts();
+                }
+            }},
+            SHIELD: { name: '보호막', width: 30, height: 30, emoji: '🛡️', action: () => {
+                player.shield = true;
+                player.shieldTimer = 7; // 7초 보호막
+                updateUI();
+            }},
+            SLOW: { name: '슬로우', width: 30, height: 30, emoji: '🎈', action: () => {
+                player.slow = true;
+                player.slowTimer = 5; // 5초 슬로우
+                updateUI();
+            }}
+        };
+
+        function spawnItem() {
+            const keys = Object.keys(ITEM_TYPES);
+            let selectedType;
+            
+            // 피가 없으면 하트 확률 증가
+            if (player.lives === 1) {
+                selectedType = Math.random() < 0.5 ? ITEM_TYPES.HEART : (Math.random() > 0.5 ? ITEM_TYPES.SHIELD : ITEM_TYPES.SLOW);
+            } else {
+                selectedType = ITEM_TYPES[keys[Math.floor(Math.random() * keys.length)]];
+            }
+
+            items.push({
+                x: Math.random() * (canvas.width - selectedType.width),
+                y: canvas.height + 50,
+                width: selectedType.width,
+                height: selectedType.height,
+                type: selectedType,
+                speedY: -3.0 * (player.slow ? 0.5 : 1.0)
+            });
+        }
+
+        // 충돌 박스 검사 (AABB 알고리즘)
+        function checkCollision(r1, r2) {
+            // 조금 더 공정한 판정을 위해 판정 마진 부여
+            const marginX = r1.width * 0.15;
+            const marginY = r1.height * 0.15;
+            return r1.x + marginX < r2.x + r2.width &&
+                   r1.x + r1.width - marginX > r2.x &&
+                   r1.y + marginY < r2.y + r2.height &&
+                   r1.y + r1.height - marginY > r2.y;
+        }
+
+        // --- 충돌 데미지 처리 ---
+        function damagePlayer(amount, color) {
+            if (player.invulnTimer > 0 || player.isSafeLanded) return;
+
+            if (player.shield) {
+                player.shield = false;
+                player.shieldTimer = 0;
+                player.invulnTimer = 1.2; // 일시적 무적
+                updateUI();
+                
+                // 보호막 파괴 시 이펙트
+                for (let i = 0; i < 20; i++) {
+                    spawnParticle(player.x + player.width/2, player.y + player.height/2, '#38bdf8', 'hit');
+                }
+                return;
+            }
+
+            // 데미지 적용
+            player.lives = Math.max(0, player.lives - amount);
+            player.invulnTimer = 1.8; // 1.8초간 무적
+            updateHearts();
+
+            // 충돌 폭발 이펙트
+            for (let i = 0; i < 25; i++) {
+                spawnParticle(player.x + player.width/2, player.y + player.height/2, color || '#ff4500', 'hit');
+            }
+
+            if (player.lives <= 0) {
+                endGame(false);
+            }
+        }
+
+        // --- 메인 게임 루프 ---
+        function gameLoop(time) {
+            if (state !== GAME_STATE.PLAYING) return;
+
+            const dt = (time - lastTime) / 1000;
+            // 비상상황 대비 델타타임 캡핑
+            const cappedDt = Math.min(dt, 0.1);
+            lastTime = time;
+
+            update(cappedDt);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- 게임 물리 및 상태 업데이트 ---
+        function update(dt) {
+            gameTime += dt;
+
+            // 서서히 올라가는 난이도 (시간이 지날수록 하강 속도 배율 증가)
+            // 최대 2.2배 속도까지 도달
+            fallSpeedMultiplier = Math.min(2.2, 1.0 + (gameTime * 0.015));
+
+            // 버프 타이머 업데이트
+            if (player.invulnTimer > 0) {
+                player.invulnTimer -= dt;
+            }
+            if (player.shield) {
+                player.shieldTimer -= dt;
+                if (player.shieldTimer <= 0) {
+                    player.shield = false;
+                    updateUI();
+                }
+            }
+            if (player.slow) {
+                player.slowTimer -= dt;
+                if (player.slowTimer <= 0) {
+                    player.slow = false;
+                    updateUI();
+                }
+            }
+
+            // 고도 갱신
+            // 풍선 버프(slow) 상태 시 하강 속도 절반 감소
+            const altReductionSpeed = baseFallSpeed * fallSpeedMultiplier * (player.slow ? 0.5 : 1.0);
+            if (!player.isSafeLanded) {
+                currentAltitude -= altReductionSpeed * dt * 3.5; // 체감 속도를 위해 배율 조절
+            }
+
+            // 착륙 시작 조건 (고도 0m 도달)
+            if (currentAltitude <= 0) {
+                currentAltitude = 0;
+                player.isSafeLanded = true;
+            }
+
+            // UI 실시간 갱신
+            updateUI();
+
+            // --- 플레이어 물리 움직임 ---
+            // 1. 키보드 컨트롤
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+                player.vx -= player.accel;
+                player.targetX = null; // 키보드 사용 시 터치 무효화
+            } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+                player.vx += player.accel;
+                player.targetX = null;
+            }
+
+            // 2. 모바일/터치 제어 물리 반영 (타겟 위치 지정)
+            if (player.targetX !== null) {
+                const centerX = player.x + player.width / 2;
+                const diff = player.targetX - centerX;
+                if (Math.abs(diff) > 5) {
+                    player.vx += Math.sign(diff) * player.accel;
+                } else {
+                    player.vx *= 0.5; // 근접 시 감속
+                }
+            }
+
+            // 마찰력 및 속도 한계
+            player.vx *= player.friction;
+            player.vx = Math.max(-player.maxSpeed, Math.min(player.maxSpeed, player.vx));
+
+            // 움직임 적용
+            player.x += player.vx;
+
+            // 벽 충돌 방지
+            if (player.x < 0) {
+                player.x = 0;
+                player.vx = 0;
+            } else if (player.x > canvas.width - player.width) {
+                player.x = canvas.width - player.width;
+                player.vx = 0;
+            }
+
+            // 가상 스크롤 갱신 (아래에서 위로 올라가는 속도)
+            yScroll -= altReductionSpeed;
+
+            // --- 배경 구름 스크롤 ---
+            cloudsBg.forEach(cloud => {
+                cloud.y -= altReductionSpeed * cloud.speed * 0.4;
+                // 천장 위로 사라지면 밑에서 재생성
+                if (cloud.y < -cloud.height) {
+                    cloud.y = canvas.height + Math.random() * 100;
+                    cloud.x = Math.random() * canvas.width;
+                }
+            });
+
+            // --- 낙하산 이펙트 파티클 생성 ---
+            if (!player.isSafeLanded && Math.random() < 0.4) {
+                // 패러슈트 하단 끝에서 기류 파티클 방출
+                spawnParticle(player.x + Math.random() * player.width, player.y + 10, 'rgba(255,255,255,0.4)', 'trail');
+            }
+
+            // 파티클 업데이트
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y -= p.vy; // 장애물 스크롤 방향과 맞추어 위로 흐르게 함
+                p.alpha -= p.decay;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // --- 장애물 업데이트 ---
+            handleSpawns(dt);
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                
+                // 기본적으로 플레이어가 아래로 하강하므로 장애물은 화면 위쪽(-Y) 방향으로 흐릅니다.
+                // 기본 스크롤량에 장애물 고유 속도를 더함
+                obs.y -= (altReductionSpeed + Math.abs(obs.speedY));
+                
+                // 특수 장애물 고유 움직임
+                if (obs.type.horizontal) {
+                    obs.x += obs.speedX;
+                    // 벽 반사
+                    if (obs.x < 0 || obs.x > canvas.width - obs.width) {
+                        obs.speedX *= -1;
+                    }
+                }
+
+                if (obs.type.wavy) {
+                    obs.pulseAngle += 0.08;
+                    obs.x += Math.sin(obs.pulseAngle) * 2;
+                }
+
+                if (obs.type.homing && !obs.homingChecked && obs.y < canvas.height * 0.6) {
+                    // 미사일 유도 기능: 플레이어 좌표 방향으로 슬며시 정렬
+                    const dx = (player.x + player.width/2) - (obs.x + obs.width/2);
+                    obs.speedX = Math.sign(dx) * 3.5;
+                    obs.homingChecked = true; // 단 한번만 타겟팅 조준
+                }
+                if (obs.type.homing && obs.homingChecked) {
+                    obs.x += obs.speedX;
+                }
+
+                // 충돌 체크
+                if (checkCollision(player, obs)) {
+                    damagePlayer(obs.type.damage, obs.type.color);
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+
+                // 화면 밖 소멸 판정
+                if (obs.y < -obs.height - 100) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // --- 아이템 업데이트 ---
+            for (let i = items.length - 1; i >= 0; i--) {
+                const item = items[i];
+                item.y -= (altReductionSpeed + Math.abs(item.speedY));
+
+                if (checkCollision(player, item)) {
+                    item.type.action();
+                    // 획득 파티클 생성
+                    for (let p = 0; p < 10; p++) {
+                        spawnParticle(item.x + item.width/2, item.y + item.height/2, '#22c55e', 'hit');
+                    }
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                if (item.y < -item.height - 50) {
+                    items.splice(i, 1);
+                }
+            }
+
+            // --- 착륙 연출 및 성공 처리 ---
+            if (player.isSafeLanded) {
+                // 장애물 클리어
+                obstacles = [];
+                items = [];
+                // 플레이어가 천천히 지상 밑으로 안착
+                player.vx = 0;
+                player.targetX = null;
+                
+                // 가상 착지 물리
+                const groundY = canvas.height - 110;
+                if (player.y < groundY) {
+                    player.y += 2.2; // 부드럽게 지상 접지
+                } else {
+                    player.y = groundY;
+                    // 착지 성공 완료 대기 후 성공 창 유도
+                    setTimeout(() => {
+                        endGame(true);
+                    }, 1200);
+                }
+            }
+        }
+
+        // --- 캔버스 프레임 렌더링 ---
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. 고도별 다이내믹 그라데이션 배경 세팅
+            // 1000m 에서 0m까지 진행될수록 하늘색 -> 연한 노을 -> 잔디밭 테마로 보간
+            const currentRatio = Math.max(0, Math.min(1, currentAltitude / MAP_START_ALTITUDE));
+            
+            // 캔버스 자체 스타일의 그라데이션 보정
+            let color1, color2;
+            if (currentRatio > 0.5) { // 고고도: 푸른 우주 & 하늘
+                const p = (currentRatio - 0.5) * 2; // 0 ~ 1
+                color1 = interpolateColor('#0f172a', '#0284c7', p);
+                color2 = interpolateColor('#0284c7', '#38bdf8', p);
+            } else if (currentRatio > 0.1) { // 중고도: 노을빛 하늘
+                const p = (currentRatio - 0.1) / 0.4; // 0 ~ 1
+                color1 = interpolateColor('#0284c7', '#f59e0b', p);
+                color2 = interpolateColor('#38bdf8', '#fef08a', p);
+            } else { // 저고도 및 지면 도달
+                const p = currentRatio / 0.1; // 0 ~ 1
+                color1 = interpolateColor('#f59e0b', '#15803d', p);
+                color2 = interpolateColor('#fef08a', '#4ade80', p);
+            }
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, color1);
+            gradient.addColorStop(1, color2);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. 입체 구름 그리기 (배경 레이어)
+            cloudsBg.forEach(cloud => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${cloud.opacity})`;
+                drawRoundedRect(ctx, cloud.x, cloud.y, cloud.width, cloud.height, cloud.height / 2);
+                ctx.fill();
+            });
+
+            // 3. 지상 대지 연출 (고도 150m 이하일 때 아래에서 지상 라인이 올라옴)
+            if (currentAltitude < 150) {
+                const landRatio = Math.max(0, 1 - (currentAltitude / 150));
+                const landHeight = 150 * landRatio;
+                
+                // 부드러운 산, 언덕 및 푸른 땅
+                ctx.fillStyle = '#166534'; // 깊은 산림 녹색
+                ctx.beginPath();
+                ctx.ellipse(canvas.width * 0.3, canvas.height - landHeight + 30, canvas.width * 0.6, 80, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#15803d'; // 잔디 녹색
+                ctx.beginPath();
+                ctx.ellipse(canvas.width * 0.8, canvas.height - landHeight + 40, canvas.width * 0.7, 70, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 꽃, 표지판 등 미니어쳐 착지존 연출
+                ctx.fillStyle = '#86efac';
+                ctx.fillRect(0, canvas.height - landHeight + 60, canvas.width, landHeight);
+
+                // 안전 헬기패드 / 착지 과녁판 과녁 그리기
+                const padX = canvas.width / 2;
+                const padY = canvas.height - landHeight + 50;
+                
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(padX, padY, 45, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.7)'; // 빨간 깃장 웰컴 서클
+                ctx.beginPath();
+                ctx.arc(padX, padY, 20, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 12px Pretendard';
+                ctx.textAlign = 'center';
+                ctx.fillText("LAND HERE!", padX, padY + 4);
+            }
+
+            // 4. 파티클 렌더링
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 5. 장애물 렌더링
+            obstacles.forEach(obs => {
+                ctx.save();
+                // 그림자 장식 효과
+                ctx.shadowColor = 'rgba(0,0,0,0.15)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetY = 4;
+
+                // 이모지 장식을 활용한 현대적 그래픽 연출
+                ctx.font = `${obs.width * 0.9}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(obs.type.emoji, obs.x + obs.width / 2, obs.y + obs.height / 2);
+
+                // 디버깅/충돌영역 가시화 비활성화 (기본 주석화)
+                /*
+                ctx.strokeStyle = obs.type.color;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+                */
+                ctx.restore();
+            });
+
+            // 6. 아이템 렌더링
+            items.forEach(item => {
+                ctx.save();
+                // 둥실둥실 뜨는 아이템 서클 이펙트
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(item.x + item.width/2, item.y + item.height/2, item.width * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = `${item.width * 0.8}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(item.type.emoji, item.x + item.width/2, item.y + item.height/2);
+                ctx.restore();
+            });
+
+            // 7. 플레이어 캐릭터 그리기
+            ctx.save();
+            
+            // 무적 깜빡임 연출
+            if (player.invulnTimer > 0 && Math.floor(player.invulnTimer * 10) % 2 === 0) {
+                ctx.globalAlpha = 0.3;
+            }
+
+            // [플레이어 낙하산 본체 & 사람 물리]
+            const px = player.x;
+            const py = player.y;
+            const pw = player.width;
+            const ph = player.height;
+
+            if (!player.isSafeLanded) {
+                // 낙하산 줄 그리기
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(px, py + 15); // 왼쪽 끝
+                ctx.lineTo(px + pw / 2, py + ph * 0.7); // 중앙 사람
+                ctx.moveTo(px + pw, py + 15); // 오른쪽 끝
+                ctx.lineTo(px + pw / 2, py + ph * 0.7);
+                ctx.stroke();
+
+                // 낙하산 돔(우산 구조) 그리기
+                const canopyGrad = ctx.createLinearGradient(px, py, px + pw, py);
+                canopyGrad.addColorStop(0, '#ef4444');
+                canopyGrad.addColorStop(0.5, '#facc15');
+                canopyGrad.addColorStop(1, '#ef4444');
+                
+                ctx.fillStyle = canopyGrad;
+                ctx.beginPath();
+                ctx.arc(px + pw / 2, py + 15, pw / 2, Math.PI, 0, false); // 반원 돔
+                ctx.fill();
+
+                // 낙하산 테두리 텍스쳐 주름 곡선
+                ctx.fillStyle = '#dc2626';
+                ctx.beginPath();
+                ctx.ellipse(px + pw / 2, py + 15, pw / 2, 6, 0, 0, Math.PI);
+                ctx.fill();
+            }
+
+            // 사람 이모지 그리기 (스카이다이버 모션)
+            ctx.font = `${pw * 0.65}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 착지 시 모션 이모지 교체
+            let characterEmoji = '🪂'; // 기본 낙하산 펼쳐짐
+            if (player.isSafeLanded) {
+                characterEmoji = '🏃'; // 서서 달리기
+            } else if (player.invulnTimer > 0) {
+                characterEmoji = '🤕'; // 충돌 아픔
+            } else if (player.slow) {
+                characterEmoji = '🧗';
+            }
+
+            // 지면에 서있으면 낙하산 제거된 순수 이모티콘만 렌더
+            if (player.isSafeLanded) {
+                ctx.fillText(characterEmoji, px + pw / 2, py + ph * 0.6);
+            } else {
+                ctx.fillText('🧍', px + pw / 2, py + ph * 0.7);
+            }
+
+            // 버프 장식 그리기 (보호막 이펙트)
+            if (player.shield) {
+                ctx.strokeStyle = '#38bdf8';
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 15;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(px + pw / 2, py + ph / 2, pw * 0.75, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // --- 유틸 함수 ---
+        // 그라데이션 보간용 헥사 컬러 연산기
+        function interpolateColor(color1, color2, factor) {
+            const r1 = parseInt(color1.substring(1, 3), 16);
+            const g1 = parseInt(color1.substring(3, 5), 16);
+            const b1 = parseInt(color1.substring(5, 7), 16);
+
+            const r2 = parseInt(color2.substring(1, 3), 16);
+            const g2 = parseInt(color2.substring(3, 5), 16);
+            const b2 = parseInt(color2.substring(5, 7), 16);
+
+            const r = Math.round(r1 + (r2 - r1) * factor);
+            const g = Math.round(g1 + (g2 - g1) * factor);
+            const b = Math.round(b1 + (b2 - b1) * factor);
+
+            const rHex = r.toString(16).padStart(2, '0');
+            const gHex = g.toString(16).padStart(2, '0');
+            const bHex = b.toString(16).padStart(2, '0');
+
+            return `#${rHex}${gHex}${bHex}`;
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height - radius);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        // --- 게임 끝내기 ---
+        function endGame(isSuccess) {
+            state = isSuccess ? GAME_STATE.SUCCESS : GAME_STATE.GAMEOVER;
+            pauseBtn.classList.add('hidden');
+
+            // 점수 판별 및 갱신
+            let finalTimeScore = gameTime;
+            let showNewHighScore = false;
+            
+            if (finalTimeScore > highTime) {
+                highTime = finalTimeScore;
+                localStorage.setItem('skydive_high_time', highTime.toFixed(1));
+                showNewHighScore = true;
+            }
+
+            // 화면 디자인 분기처리
+            if (isSuccess) {
+                resultBadge.innerHTML = '🏆';
+                resultBadge.className = "w-20 h-20 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto text-4xl shadow-lg animate-bounce";
+                resultTitle.textContent = "안전 착지 성공!";
+                resultDesc.textContent = "침착한 대처 덕에 부상 없이 무사히 구조 구역에 도달했습니다!";
+                resultTitle.className = "text-3xl font-black text-emerald-400";
+            } else {
+                resultBadge.innerHTML = '☠️';
+                resultBadge.className = "w-20 h-20 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center mx-auto text-4xl shadow-lg";
+                resultTitle.textContent = "낙하 탈출 실패";
+                resultDesc.textContent = "장애물 충돌에 의해 균형을 잃었습니다. 부상 치료가 시급합니다!";
+                resultTitle.className = "text-3xl font-black text-red-500";
+            }
+
+            resultTime.textContent = `${gameTime.toFixed(1)}초`;
+            resultAlt.textContent = `${Math.floor(currentAltitude)}m`;
+
+            if (showNewHighScore) {
+                highScoreMsg.classList.remove('hidden');
+            } else {
+                highScoreMsg.classList.add('hidden');
+            }
+
+            resultScreen.classList.remove('hidden');
+        }
+
+        // --- 버튼 인터랙션 리스너 등록 ---
+        startBtn.addEventListener('click', initGame);
+        restartBtn.addEventListener('click', initGame);
+        homeBtn.addEventListener('click', () => {
+            state = GAME_STATE.MENU;
+            startScreen.classList.remove('hidden');
+            resultScreen.classList.add('hidden');
+            pauseBtn.classList.add('hidden');
+        });
+
+        // 일시정지 로직
+        pauseBtn.addEventListener('click', () => {
+            if (state !== GAME_STATE.PLAYING) return;
+            state = GAME_STATE.PAUSED;
+            pauseScreen.classList.remove('hidden');
+        });
+
+        resumeBtn.addEventListener('click', () => {
+            if (state !== GAME_STATE.PAUSED) return;
+            state = GAME_STATE.PLAYING;
+            pauseScreen.classList.add('hidden');
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        });
+
+        pauseQuitBtn.addEventListener('click', () => {
+            state = GAME_STATE.MENU;
+            pauseScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+        });
+
+        // 키보드 Spacebar로 일시정지 바로가기 지원
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'p' || e.key === 'P') {
+                if (state === GAME_STATE.PLAYING) {
+                    pauseBtn.click();
+                } else if (state === GAME_STATE.PAUSED) {
+                    resumeBtn.click();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
